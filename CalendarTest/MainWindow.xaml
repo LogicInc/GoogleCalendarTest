@@ -16,6 +16,10 @@
                 <Label>ClientSecret</Label>
                 <TextBox x:Name="ClientSecretTextBox" Width="417"></TextBox>
             </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="10,10,10,10">
+                <Label>User</Label>
+                <TextBox x:Name="User" Width="417"></TextBox>
+            </StackPanel>
         </StackPanel>
     </DockPanel>
 </Window>

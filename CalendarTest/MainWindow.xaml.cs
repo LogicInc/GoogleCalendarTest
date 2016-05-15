@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using Google.Apis.Auth.OAuth2;
@@ -27,22 +29,20 @@ namespace CalendarTest
 
         private void AddCalendarEventClick(object sender, RoutedEventArgs e)
         {
+            const string calendarEventDescription = "Test event for DrZob";
+            var timeFrom = DateTime.Today.AddHours(4);
+            var timeTo = DateTime.Today.AddHours(6);
+            var calendarEvent = CreateCalendarEvent(calendarEventDescription, timeFrom, timeTo);
+
             try
             {
-                var settings = Authorize();
-                if (settings == null)
-                    return;
+                var credentials = GetCredentials(new[] { CalendarService.Scope.Calendar }, User.Text);
 
                 var calendarService = new CalendarService(new BaseClientService.Initializer
                                                   {
-                                                      HttpClientInitializer = _credential,
-                                                      ApplicationName = ApplicationName,
+                                                      HttpClientInitializer = credentials,
+                                                      ApplicationName = ApplicationName
                                                   });
-
-                const string calendarEventDescription = "Test event for DrZob";
-                var timeFrom = DateTime.Today.AddHours(4);
-                var timeTo = DateTime.Today.AddHours(6);
-                var calendarEvent = CreateCalendarEvent(calendarEventDescription, timeFrom, timeTo);
 
                 var calendars = calendarService.CalendarList.List().Execute();
                 var calendar = calendars.Items.SingleOrDefault(x => x.Summary == "DrZob");
@@ -66,7 +66,10 @@ namespace CalendarTest
         {
             try
             {
-                var settings = Authorize();
+                var settings = Authorize(new[]
+                {
+                    ContactsScope
+                });
                 if (settings == null)
                     return;
 
@@ -84,34 +87,24 @@ namespace CalendarTest
             }
         }
 
-        private RequestSettings Authorize()
+        private UserCredential GetCredentials(IEnumerable<string> scopes, string user = "")
         {
-            //if (!HasStoredTokens())
-            //{
+            var secrets = GetClientSecrects();
 
-            if (string.IsNullOrEmpty(ClientIdTextBox.Text) || string.IsNullOrEmpty(ClientSecretTextBox.Text))
-            {
-                MessageBox.Show("You must enter ClientId and ClientSecret first!");
-                return null;
-            }
+            var credPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".credentials/drzob_calendar", user);
 
-            var secrets = new ClientSecrets
-                          {
-                              ClientId = ClientIdTextBox.Text,
-                              ClientSecret = ClientSecretTextBox.Text
-                          };
+            return GoogleWebAuthorizationBroker.AuthorizeAsync(secrets, scopes, StoreKey, CancellationToken.None,
+                new FileDataStore(credPath, true)).Result;
+        }
 
-            var storage = new FileDataStore("GoogleCalendar.Test");
+        private RequestSettings Authorize(string[] scopes)
+        {
+            var secrets = GetClientSecrects();
 
-            string[] scopes =
-                {
-                    CalendarService.Scope.Calendar,
-                    CalendarService.Scope.CalendarReadonly,
-                    ContactsScope,
-                    //Oauth2Service.Scope.UserinfoEmail
-                };
+            var credPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".credentials/drzob_calendar.json");
 
-            _credential = GoogleWebAuthorizationBroker.AuthorizeAsync(secrets, scopes, StoreKey, CancellationToken.None, storage).Result;
+            _credential = GoogleWebAuthorizationBroker.AuthorizeAsync(secrets, scopes, StoreKey, CancellationToken.None,
+                new FileDataStore(credPath, true)).Result;
 
             var parameters = new OAuth2Parameters
                              {
@@ -119,11 +112,21 @@ namespace CalendarTest
                                  RefreshToken = _credential.Token.RefreshToken
                              };
 
-            var settings = new RequestSettings(ApplicationName, parameters);
+            return new RequestSettings(ApplicationName, parameters);
+        }
 
-            return settings;
-
-            //}
+        private ClientSecrets GetClientSecrects()
+        {
+            if (string.IsNullOrEmpty(ClientIdTextBox.Text) || string.IsNullOrEmpty(ClientSecretTextBox.Text))
+            {
+                MessageBox.Show("You must enter ClientId and ClientSecret first!");
+                return null;
+            }
+            return new ClientSecrets
+            {
+                ClientId = ClientIdTextBox.Text,
+                ClientSecret = ClientSecretTextBox.Text
+            };
         }
 
         public bool HasStoredTokens()
@@ -131,9 +134,7 @@ namespace CalendarTest
             var store = new FileDataStore("GoogleCalendar.Test");
             var t = store.GetAsync<TokenResponse>(StoreKey);
             t.Wait(TimeSpan.FromMilliseconds(100));
-            var obj = t.Result;
-
-            return obj != null;
+            return t.Result != null;
         }
 
         private static Event CreateCalendarEvent(string description, DateTime timeFrom, DateTime timeTo)
@@ -141,9 +142,7 @@ namespace CalendarTest
             var start = new EventDateTime { DateTime = timeFrom };
             var end = new EventDateTime { DateTime = timeTo };
 
-            var googleCalendarEvent = new Event { Start = start, End = end, Description = description, Summary = description };
-
-            return googleCalendarEvent;
+            return new Event { Start = start, End = end, Description = description, Summary = description };
         }
     }
 }
